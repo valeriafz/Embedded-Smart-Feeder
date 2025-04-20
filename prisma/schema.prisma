@@ -10,8 +10,20 @@ datasource db {
 model User {
   id        Int      @id @default(autoincrement())
   email     String   @unique
-  name      String?
   password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cats      Cat[]    
+}
+
+model Cat {
+  id        Int      @id @default(autoincrement())
+  name      String
+  weight    Float?
+  breed     String?
+  imageUrl  String?
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
