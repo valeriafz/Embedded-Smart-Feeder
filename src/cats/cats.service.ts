@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCatDto } from './dto/create-cat.dto';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { UpdateCatDto } from './dto/update-cat.dto';
 
 @Injectable()
 export class CatsService {
@@ -27,7 +28,7 @@ export class CatsService {
 
   async findOne(id: number, userId: number) {
     const cat = await this.prisma.cat.findFirst({
-      where: { 
+      where: {
         id,
         userId,
       },
@@ -41,7 +42,6 @@ export class CatsService {
   }
 
   async uploadImage(id: number, userId: number, file: Express.Multer.File) {
-    // First check if cat exists and belongs to user
     await this.findOne(id, userId);
 
     // Upload image to Cloudinary
@@ -51,6 +51,16 @@ export class CatsService {
     return this.prisma.cat.update({
       where: { id },
       data: { imageUrl: result.secure_url },
+    });
+  }
+
+  async update(id: number, userId: number, updateCatDto: UpdateCatDto) {
+    // Check if the cat exists and belongs to the user
+    await this.findOne(id, userId);
+
+    return this.prisma.cat.update({
+      where: { id },
+      data: updateCatDto,
     });
   }
 
