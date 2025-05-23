@@ -13,17 +13,44 @@ model User {
   password  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  cats      Cat[]    
+  cats      Cat[]
 }
 
 model Cat {
+  id             Int              @id @default(autoincrement())
+  name           String
+  weight         Float?
+  breed          String?
+  imageUrl       String?
+  userId         Int
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  feedingHistory FeedingHistory[]
+  feedingSchedules FeedingSchedule[]
+}
+
+model FeedingSchedule {
   id        Int      @id @default(autoincrement())
-  name      String
-  weight    Float?
-  breed     String?
-  imageUrl  String?
-  userId    Int
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  catId     Int
+  deviceId  String
+  time      String   // Format: "HH:mm" (e.g., "08:30")
+  amount    Int      // Amount in grams or ml
+  isActive  Boolean  @default(true)
+  cat       Cat      @relation(fields: [catId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([catId, deviceId, time]) // Prevent duplicate schedules for same cat/device/time
+}
+
+model FeedingHistory {
+  id        Int      @id @default(autoincrement())
+  catId     Int
+  deviceId  String
+  amount    Int      // Amount dispensed
+  timestamp DateTime @default(now())
+  cat       Cat      @relation(fields: [catId], references: [id], onDelete: Cascade)
+
+  @@index([catId, timestamp]) // Index for efficient querying by cat and date range
 }
