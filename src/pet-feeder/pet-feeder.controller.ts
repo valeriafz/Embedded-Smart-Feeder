@@ -7,6 +7,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { MqttService } from './pet-feeder.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface FeedRequest {
   amount?: number;
@@ -19,7 +20,10 @@ interface ScheduleRequest {
 
 @Controller('pet-feeder')
 export class PetFeederController {
-  constructor(private readonly mqttService: MqttService) {}
+  constructor(
+    private readonly mqttService: MqttService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post(':deviceId/cats/:catId/feed')
   async feedCat(
@@ -117,6 +121,49 @@ export class PetFeederController {
         success: true,
         message: `Schedule command sent to device ${deviceId} for cat ${catId}`,
         schedule: scheduleRequest,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post(':deviceId/cats/:catId/sendImage')
+  async sendImageCommand(
+    @Param('deviceId') deviceId: string,
+    @Param('catId') catId: string,
+  ) {
+    try {
+      if (!deviceId || !catId) {
+        throw new HttpException(
+          'Device ID and Cat ID are required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (!this.mqttService.isConnected()) {
+        throw new HttpException(
+          'MQTT service not connected',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+
+      const success = await this.mqttService.sendImage(deviceId, catId);
+
+      if (!success) {
+        throw new HttpException(
+          'Failed to send image command',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
+      return {
+        success: true,
+        message: `Send image command sent to device ${deviceId} for cat ${catId}`,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {

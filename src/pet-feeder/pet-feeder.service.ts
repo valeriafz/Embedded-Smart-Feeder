@@ -139,6 +139,29 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async sendImage(deviceId: string, catId: string): Promise<boolean> {
+    try {
+      const topic = `pet-feeder/${deviceId}/commands/sendImage`;
+      const payload = JSON.stringify({
+        action: 'send_image',
+        catId,
+        timestamp: new Date().toISOString(),
+      });
+
+      await this.client.publishAsync(topic, payload, { qos: 1 });
+      this.logger.log(
+        `Sending image command sent to device ${deviceId} for cat ${catId}`,
+      );
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to send image command to device ${deviceId} for cat ${catId}:`,
+        error,
+      );
+      return false;
+    }
+  }
+
   private handleIncomingMessage(topic: string, message: string) {
     try {
       const parsedMessage = JSON.parse(message);
