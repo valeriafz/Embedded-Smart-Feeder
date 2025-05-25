@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Welcome to FEDEA</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f4f4f4;
+      }
+      .container {
+        background: white;
+        padding: 40px;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #f0f0f0;
+      }
+      .logo {
+        max-width: 150px;
+        height: auto;
+        margin-bottom: 20px;
+      }
+      h1 {
+        color: #b42703;
+        margin: 0;
+        font-size: 28px;
+      }
+      .welcome-message {
+        background: linear-gradient(135deg, #ff3705 0%, #ff7451 100%);
+        color: white;
+        padding: 25px;
+        border-radius: 8px;
+        text-align: center;
+        margin: 25px 0;
+      }
+      .welcome-message h2 {
+        margin: 0 0 10px 0;
+        font-size: 24px;
+      }
+      .content {
+        margin: 25px 0;
+        line-height: 1.8;
+      }
+      .features {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin: 25px 0;
+      }
+      .features ul {
+        margin: 0;
+        padding-left: 20px;
+      }
+      .features li {
+        margin: 8px 0;
+        color: #555;
+      }
+      .cta-button {
+        display: inline-block;
+        background: linear-gradient(135deg, #ff3705 0%, #ff7451 100%);
+        color: white;
+        padding: 15px 30px;
+        text-decoration: none;
+        border-radius: 5px;
+        font-weight: bold;
+        margin: 20px 0;
+        text-align: center;
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+        font-size: 14px;
+        color: #666;
+        text-align: center;
+      }
+      .paw-emoji {
+        font-size: 24px;
+        margin: 0 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <img
+          src="https://i.imgur.com/O1YmuYZ.png"
+          alt="{{companyName}} Logo"
+          class="logo"
+        />
+        <h1>{{companyName}}</h1>
+      </div>
+
+      <div class="welcome-message">
+        <h2>Welcome, {{userName}}! <span class="paw-emoji">🐾</span></h2>
+        <p>We're thrilled to have you join our pet-loving community!</p>
+      </div>
+
+      <div class="content">
+        <p>Hello {{userName}},</p>
+
+        <p>
+          Thank you for signing up for {{companyName}}! We're excited to help
+          you take the best care of your furry friends with our smart pet
+          feeding solutions.
+        </p>
+
+        <div class="features">
+          <h3>🎉 What you can do now:</h3>
+          <ul>
+            <li>
+              <strong>Schedule automatic feedings</strong> - Never forget to
+              feed your pets again
+            </li>
+            <li>
+              <strong>Monitor feeding history</strong> - Keep track of your
+              pet's eating habits
+            </li>
+            <li>
+              <strong>Remote feeding control</strong> - Feed your pets even when
+              you're away
+            </li>
+            <li>
+              <strong>Multiple pet management</strong> - Perfect for multi-pet
+              households
+            </li>
+            <li>
+              <strong>Real-time notifications</strong> - Stay updated on your
+              pet's feeding times
+            </li>
+          </ul>
+        </div>
+
+        <p>
+          Ready to get started? Log in to your account and begin setting up your
+          first pet profile and feeding schedule.
+        </p>
+
+        <center>
+          <a href="https://yourapp.com/dashboard" class="cta-button"
+            >Get Started Now</a
+          >
+        </center>
+
+        <p>
+          If you have any questions or need assistance, don't hesitate to reach
+          out to our support team at
+          <a href="mailto:{{supportEmail}}">{{supportEmail}}</a>. We're here to
+          help!
+        </p>
+
+        <p>Happy feeding! <span class="paw-emoji">🐱</span></p>
+
+        <p>
+          Best regards,<br />
+          The {{companyName}} Team
+        </p>
+      </div>
+
+      <div class="footer">
+        <p>&copy; {{currentYear}} {{companyName}}. All rights reserved.</p>
+        <p>This email was sent because you signed up for our service.</p>
+      </div>
+    </div>
+  </body>
+</html>

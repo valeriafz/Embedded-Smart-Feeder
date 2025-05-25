@@ -19,10 +19,9 @@ export class CloudinaryService {
           } else {
             resolve(result);
           }
-        }
+        },
       );
 
-      // Write the file buffer to the upload stream
       uploadStream.write(file.buffer);
       uploadStream.end();
     });
