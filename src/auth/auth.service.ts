@@ -1,6 +1,8 @@
+// src/auth/auth.service.ts
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import { EmailService } from './email/email.service';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import * as bcrypt from 'bcrypt';
@@ -10,6 +12,7 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private emailService: EmailService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -30,13 +33,17 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
     const user = await this.validateUser(email, password);
-    
+
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const payload = { sub: user.id, email: user.email };
-    
+
+    this.emailService
+      .sendWelcomeEmail(user.email)
+      .catch((error) => console.error('Welcome email failed:', error));
+
     return {
       access_token: this.jwtService.sign(payload),
       user,
@@ -45,9 +52,13 @@ export class AuthService {
 
   async register(createUserDto: CreateUserDto) {
     const user = await this.usersService.create(createUserDto);
-    
+
     const payload = { sub: user.id, email: user.email };
-    
+
+    this.emailService
+      .sendWelcomeEmail(user.email)
+      .catch((error) => console.error('Welcome email failed:', error));
+
     return {
       access_token: this.jwtService.sign(payload),
       user,

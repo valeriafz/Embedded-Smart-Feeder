@@ -9,6 +9,7 @@ import { SettingsModule } from './settings/settings.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { MqttService } from './pet-feeder/pet-feeder.service';
 import { PetFeederController } from './pet-feeder/pet-feeder.controller';
+import { EmailModule } from './auth/email/email.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PetFeederController } from './pet-feeder/pet-feeder.controller';
     }),
     AuthModule,
     UsersModule,
+    EmailModule,
     PrismaModule,
     CatsModule,
     CloudinaryModule,
