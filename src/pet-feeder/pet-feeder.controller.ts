@@ -93,7 +93,7 @@ export class PetFeederController {
 
       return {
         success: true,
-        message: `Feed command sent to device ${deviceId} for cat ${cat.id}`,
+        message: `Feed command sent to device ${deviceId} for cat ${cat.name}`,
         amount,
         timestamp: new Date().toISOString(),
       };
@@ -127,6 +127,15 @@ export class PetFeederController {
         );
       }
 
+      // Validate time format (HH:mm)
+      const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!timeRegex.test(scheduleRequest.time)) {
+        throw new HttpException(
+          'Invalid time format. Use HH:mm (e.g., 08:30)',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       const cat = await this.prisma.cat.findUnique({
         where: { id: parseInt(catId) },
       });
@@ -142,21 +151,8 @@ export class PetFeederController {
         );
       }
 
-      const success = await this.mqttService.scheduleFeeding(
-        deviceId,
-        catId,
-        scheduleRequest,
-      );
-
-      if (!success) {
-        throw new HttpException(
-          'Failed to send schedule command',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-
-      // Save or update feeding schedule in database
-      await this.prisma.feedingSchedule.upsert({
+      // Save or update feeding schedule in database first
+      const schedule = await this.prisma.feedingSchedule.upsert({
         where: {
           catId_deviceId_time: {
             catId: parseInt(catId),
@@ -178,10 +174,36 @@ export class PetFeederController {
         },
       });
 
+      // Now schedule the feeding using the backend scheduler
+      const success = await this.mqttService.scheduleFeeding(
+        deviceId,
+        catId,
+        scheduleRequest,
+      );
+
+      if (!success) {
+        // If scheduling fails, mark the schedule as inactive
+        await this.prisma.feedingSchedule.update({
+          where: { id: schedule.id },
+          data: { isActive: false },
+        });
+
+        throw new HttpException(
+          'Failed to schedule feeding',
+          HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+      }
+
       return {
         success: true,
-        message: `Schedule command sent to device ${deviceId} for cat ${cat.name}`,
-        schedule: scheduleRequest,
+        message: `Feeding scheduled for device ${deviceId} for cat ${cat.name} at ${scheduleRequest.time} (Bucharest time)`,
+        schedule: {
+          id: schedule.id,
+          time: scheduleRequest.time,
+          amount: scheduleRequest.amount,
+          deviceId,
+          catId: parseInt(catId),
+        },
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
@@ -366,6 +388,14 @@ export class PetFeederController {
         throw new HttpException('Schedule not found', HttpStatus.NOT_FOUND);
       }
 
+      // Cancel the scheduled job in the MQTT service
+      await this.mqttService.cancelSchedule(
+        schedule.deviceId,
+        schedule.catId.toString(),
+        schedule.time,
+      );
+
+      // Mark schedule as inactive in database
       await this.prisma.feedingSchedule.update({
         where: { id: parseInt(scheduleId) },
         data: { isActive: false },

@@ -41,7 +41,7 @@ model FeedingSchedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([catId, deviceId, time]) // Prevent duplicate schedules for same cat/device/time
+  @@unique([catId, deviceId, time]) 
 }
 
 model FeedingHistory {
