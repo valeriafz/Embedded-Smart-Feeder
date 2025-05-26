@@ -12,6 +12,10 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   private client: mqtt.MqttClient;
   private readonly logger = new Logger(MqttService.name);
   private scheduledJobs = new Map<string, NodeJS.Timeout>();
+  private deviceWeights = new Map<
+    string,
+    { weight: number; timestamp: Date }
+  >();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -30,18 +34,11 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     this.client.on('connect', () => {
       this.logger.log(`Connected to MQTT broker ${brokerUrl}`);
 
-      this.client.subscribe('pet-feeder/+/status', (err) => {
+      this.client.subscribe('pet-feeder/#', (err) => {
         if (err) {
-          this.logger.error('Failed to subscribe to status topics', err);
-        }
-      });
-
-      this.client.subscribe('pet-feeder/+/feeding/response', (err) => {
-        if (err) {
-          this.logger.error(
-            'Failed to subscribe to feeding response topics',
-            err,
-          );
+          this.logger.error('Failed to subscribe to pet-feeder topics', err);
+        } else {
+          this.logger.log('Successfully subscribed to pet-feeder/# topics');
         }
       });
     });
@@ -68,6 +65,12 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     if (this.client) {
       await this.client.endAsync();
     }
+  }
+
+  getDeviceWeight(
+    deviceId: string,
+  ): { weight: number; timestamp: Date } | null {
+    return this.deviceWeights.get(deviceId) || null;
   }
 
   async dispenseFeed(
@@ -194,7 +197,6 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     // Parse time in HH:mm format
     const [hours, minutes] = time.split(':').map((num) => parseInt(num, 10));
 
-    // Create date in Bucharest timezone
     const now = new Date();
     const bucharestTime = new Date(
       now.toLocaleString('en-US', { timeZone: 'Europe/Bucharest' }),
@@ -342,29 +344,123 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private handleIncomingMessage(topic: string, message: string) {
+  async trainModel(deviceId: string): Promise<boolean> {
     try {
-      const parsedMessage = JSON.parse(message);
-      this.logger.log(`Received message on topic ${topic}:`, parsedMessage);
+      const topic = `pet-feeder/${deviceId}/commands/info`;
+      const payload = JSON.stringify({
+        action: 'trainModel',
+        timestamp: new Date().toISOString(),
+      });
 
-      if (topic.includes('/status')) {
-        this.handleDeviceStatus(topic, parsedMessage);
-      } else if (topic.includes('/feeding/response')) {
-        this.handleFeedingResponse(topic, parsedMessage);
-      }
+      await this.client.publishAsync(topic, payload, { qos: 1 });
+      this.logger.log(`Successfull train model sent to device ${deviceId}`);
+      return true;
     } catch (error) {
-      this.logger.error(`Failed to parse message from topic ${topic}:`, error);
+      this.logger.error(
+        `Failed to send train model to device ${deviceId}`,
+        error,
+      );
+      return false;
     }
   }
 
-  private handleDeviceStatus(topic: string, message: any) {
-    const deviceId = topic.split('/')[1];
-    this.logger.log(`Device ${deviceId} status:`, message);
+  private async handleCatDetection(deviceId: string, message: any) {
+    try {
+      const { catId, timestamp } = message;
+
+      if (!catId || !timestamp) {
+        this.logger.warn(
+          `Invalid cat detection message from device ${deviceId}:`,
+          message,
+        );
+        return;
+      }
+
+      // Convert timestamp to Bucharest timezone
+      const detectionTime = new Date(timestamp);
+      const bucharestTime = new Date(
+        detectionTime.toLocaleString('en-US', { timeZone: 'Europe/Bucharest' }),
+      );
+
+      // Format current time as HH:MM
+      const currentTimeString = bucharestTime.toTimeString().slice(0, 5); // Gets HH:MM format
+
+      this.logger.log(
+        `Cat ${catId} detected at device ${deviceId} at ${currentTimeString}`,
+      );
+
+      // Check if cat has a scheduled meal at this time
+      const schedule = await this.prisma.feedingSchedule.findFirst({
+        where: {
+          catId: parseInt(catId),
+          deviceId,
+          time: currentTimeString,
+          isActive: true,
+        },
+      });
+
+      if (schedule) {
+        // Cat is on schedule - do nothing
+        this.logger.log(
+          `Cat ${catId} is on schedule at ${currentTimeString} - no action needed`,
+        );
+        return;
+      }
+
+      // Cat is not on schedule - dispense food
+      this.logger.log(
+        `Cat ${catId} not on schedule at ${currentTimeString} - dispensing food`,
+      );
+
+      const success = await this.dispenseFeed(deviceId, catId, 100);
+
+      if (success) {
+        // Record the feeding in history
+        await this.prisma.feedingHistory.create({
+          data: {
+            catId: parseInt(catId),
+            deviceId,
+            amount: 100,
+            timestamp: new Date(),
+          },
+        });
+
+        this.logger.log(
+          `Successfully dispensed food for cat ${catId} at device ${deviceId}`,
+        );
+      } else {
+        this.logger.error(
+          `Failed to dispense food for cat ${catId} at device ${deviceId}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error handling cat detection for device ${deviceId}:`,
+        error,
+      );
+    }
   }
 
-  private handleFeedingResponse(topic: string, message: any) {
+  private handleIncomingMessage(topic: string, message: any) {
     const deviceId = topic.split('/')[1];
-    this.logger.log(`Feeding response from device ${deviceId}:`, message);
+    this.logger.log(`Info message from device ${deviceId}:`, message);
+
+    // Handle weight updates
+    if (message.action === 'sendWeight' && message.weight) {
+      const weight = parseFloat(message.weight);
+      const timestamp = message.timestamp
+        ? new Date(message.timestamp)
+        : new Date();
+
+      this.deviceWeights.set(deviceId, { weight, timestamp });
+      this.logger.log(
+        `Updated weight for device ${deviceId}: ${weight}g at ${timestamp.toISOString()}`,
+      );
+    }
+
+    if (message.action === 'sendCat') {
+      this.handleCatDetection(deviceId, message);
+    }
   }
 
   // Utility method to check if client is connected

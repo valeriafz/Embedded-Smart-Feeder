@@ -27,6 +27,36 @@ export class PetFeederController {
     private readonly prisma: PrismaService,
   ) {}
 
+  @Get(':deviceId/weight')
+  async getDeviceWeight(@Param('deviceId') deviceId: string) {
+    try {
+      const weightData = this.mqttService.getDeviceWeight(deviceId);
+
+      if (!weightData) {
+        throw new HttpException(
+          `No weight data available for device ${deviceId}`,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      return {
+        deviceId,
+        weight: weightData.weight,
+        timestamp: weightData.timestamp,
+        unit: 'grams',
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   @Post(':deviceId/cats/:catId/feed')
   async feedCat(
     @Param('deviceId') deviceId: string,
@@ -204,6 +234,36 @@ export class PetFeederController {
           deviceId,
           catId: parseInt(catId),
         },
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  @Post(':deviceId/trainModel')
+  async trainModelCommand(@Param('deviceId') deviceId: string) {
+    try {
+      if (!deviceId) {
+        throw new HttpException('Device ID required', HttpStatus.BAD_REQUEST);
+      }
+
+      if (!this.mqttService.isConnected()) {
+        throw new HttpException(
+          'MQTT service not connected',
+          HttpStatus.SERVICE_UNAVAILABLE,
+        );
+      }
+
+      await this.mqttService.trainModel(deviceId);
+
+      return {
+        success: true,
+        message: `Successfull train model sent to device ${deviceId}`,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
