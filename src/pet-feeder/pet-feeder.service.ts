@@ -389,28 +389,35 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         `Cat ${catId} detected at device ${deviceId} at ${currentTimeString}`,
       );
 
-      // Check if cat has a scheduled meal at this time
-      const schedule = await this.prisma.feedingSchedule.findFirst({
+      // Check if cat has ANY active schedule for this device
+      const activeSchedules = await this.prisma.feedingSchedule.findMany({
         where: {
           catId: parseInt(catId),
           deviceId,
-          time: currentTimeString,
           isActive: true,
         },
       });
 
-      if (schedule) {
-        // Cat is on schedule - do nothing
-        this.logger.log(
-          `Cat ${catId} is on schedule at ${currentTimeString} - no action needed`,
+      if (activeSchedules.length > 0) {
+        // Cat has active schedules - check if it's specifically scheduled for this time
+        const scheduledNow = activeSchedules.some(
+          (schedule) => schedule.time === currentTimeString,
         );
-        return;
+
+        if (scheduledNow) {
+          this.logger.log(
+            `Cat ${catId} is on schedule at ${currentTimeString} - no action needed`,
+          );
+        } else {
+          this.logger.log(
+            `Cat ${catId} has active schedules but not for ${currentTimeString} - no action needed`,
+          );
+        }
+        return; // Don't dispense if cat has any active schedule
       }
 
-      // Cat is not on schedule - dispense food
-      this.logger.log(
-        `Cat ${catId} not on schedule at ${currentTimeString} - dispensing food`,
-      );
+      // Cat has no active schedules at all - dispense food
+      this.logger.log(`Cat ${catId} has no active schedules - dispensing food`);
 
       const success = await this.dispenseFeed(deviceId, catId, 100);
 
@@ -441,25 +448,28 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private handleIncomingMessage(topic: string, message: any) {
-    const deviceId = topic.split('/')[1];
-    this.logger.log(`Info message from device ${deviceId}:`, message);
+  private handleIncomingMessage(topic: string, message: string) {
+    try {
+      const payload = JSON.parse(message);
+      const deviceId = topic.split('/')[1];
+      this.logger.log(`Info message from device ${deviceId}:`, payload);
 
-    // Handle weight updates
-    if (message.action === 'sendWeight' && message.weight) {
-      const weight = parseFloat(message.weight);
-      const timestamp = message.timestamp
-        ? new Date(message.timestamp)
-        : new Date();
+      // Handle weight updates
+      if (payload.action === 'sendWeight' && payload.weight) {
+        const weight = parseFloat(payload.weight);
+        this.deviceWeights.set(deviceId, {
+          weight: weight,
+          timestamp: new Date(payload.timestamp || new Date()),
+        });
 
-      this.deviceWeights.set(deviceId, { weight, timestamp });
-      this.logger.log(
-        `Updated weight for device ${deviceId}: ${weight}g at ${timestamp.toISOString()}`,
-      );
-    }
+        this.logger.log(`Received weight for device ${deviceId}: ${weight}`);
+      }
 
-    if (message.action === 'sendCat') {
-      this.handleCatDetection(deviceId, message);
+      if (payload.action === 'sendCat') {
+        this.handleCatDetection(deviceId, payload);
+      }
+    } catch (error) {
+      this.logger.error(`Error processing message from topic ${topic}:`, error);
     }
   }
 
