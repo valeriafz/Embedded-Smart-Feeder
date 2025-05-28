@@ -302,6 +302,75 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  // Updated MqttService method - no deviceId needed
+  async toggleCatSchedules(
+    catId: number,
+    isActive: boolean,
+  ): Promise<{ success: boolean; affectedCount: number; message: string }> {
+    try {
+      // Get all schedules for this cat (across all devices)
+      const schedules = await this.prisma.feedingSchedule.findMany({
+        where: {
+          catId,
+        },
+      });
+
+      if (schedules.length === 0) {
+        return {
+          success: false,
+          affectedCount: 0,
+          message: 'No schedules found for this cat',
+        };
+      }
+
+      // Update all schedules for this cat
+      const updateResult = await this.prisma.feedingSchedule.updateMany({
+        where: {
+          catId,
+        },
+        data: { isActive },
+      });
+
+      // Handle the scheduled jobs
+      for (const schedule of schedules) {
+        const scheduleKey = `${schedule.deviceId}-${schedule.catId}-${schedule.time}`;
+
+        if (isActive) {
+          // Activating - start the job
+          this.scheduleNextFeeding(
+            schedule.deviceId,
+            schedule.catId.toString(),
+            schedule.time,
+            schedule.amount,
+          );
+        } else {
+          // Deactivating - cancel the job
+          if (this.scheduledJobs.has(scheduleKey)) {
+            clearTimeout(this.scheduledJobs.get(scheduleKey));
+            this.scheduledJobs.delete(scheduleKey);
+          }
+        }
+      }
+
+      this.logger.log(
+        `${isActive ? 'Activated' : 'Deactivated'} ${updateResult.count} schedules for cat ${catId}`,
+      );
+
+      return {
+        success: true,
+        affectedCount: updateResult.count,
+        message: `${updateResult.count} schedule(s) ${isActive ? 'activated' : 'deactivated'} successfully`,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to toggle schedules for cat ${catId}:`, error);
+      return {
+        success: false,
+        affectedCount: 0,
+        message: 'Failed to toggle schedules',
+      };
+    }
+  }
+
   async requestDeviceStatus(deviceId: string): Promise<boolean> {
     try {
       const topic = `pet-feeder/${deviceId}/commands/status`;
