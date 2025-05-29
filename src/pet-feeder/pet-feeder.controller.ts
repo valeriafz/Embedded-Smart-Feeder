@@ -3,13 +3,21 @@ import {
   Post,
   Get,
   Param,
+  Patch,
+  BadRequestException,
   Body,
   HttpException,
   HttpStatus,
   Query,
 } from '@nestjs/common';
+import { IsBoolean } from 'class-validator';
 import { MqttService } from './pet-feeder.service';
 import { PrismaService } from '../prisma/prisma.service';
+
+class ToggleCatSchedulesDto {
+  @IsBoolean()
+  isActive: boolean;
+}
 
 interface FeedRequest {
   amount?: number;
@@ -384,6 +392,28 @@ export class PetFeederController {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+
+  @Patch('cats/:catId/toggle')
+  async toggleCatSchedules(
+    @Param('catId') catId: string,
+    @Body() dto: ToggleCatSchedulesDto,
+  ) {
+    const result = await this.mqttService.toggleCatSchedules(
+      parseInt(catId),
+      dto.isActive,
+    );
+
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+
+    return {
+      success: true,
+      message: result.message,
+      affectedCount: result.affectedCount,
+      status: dto.isActive ? 'activated' : 'deactivated',
+    };
   }
 
   @Get('cats/:catId/schedules')
