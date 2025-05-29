@@ -16,6 +16,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     string,
     { weight: number; timestamp: Date }
   >();
+  private recentDetections = new Map<string, Date>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -76,7 +77,7 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
   async dispenseFeed(
     deviceId: string,
     catId: string,
-    amount: number = 100,
+    amount: number = 20,
   ): Promise<boolean> {
     try {
       const topic = `pet-feeder/${deviceId}/commands/feed`;
@@ -445,69 +446,83 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
+      // Create a unique key for this detection
+      const detectionKey = `${deviceId}-${catId}`;
+      const now = new Date();
+
+      // Check if we've processed this cat detection recently (within last 30 seconds)
+      const lastDetection = this.recentDetections.get(detectionKey);
+      if (lastDetection && now.getTime() - lastDetection.getTime() < 30000) {
+        this.logger.log(
+          `Ignoring duplicate cat detection for ${detectionKey} - processed ${Math.round((now.getTime() - lastDetection.getTime()) / 1000)}s ago`,
+        );
+        return;
+      }
+
+      // Update the recent detection timestamp
+      this.recentDetections.set(detectionKey, now);
+
+      // Clean up old detection records (older than 5 minutes)
+      for (const [key, detectionTime] of this.recentDetections.entries()) {
+        if (now.getTime() - detectionTime.getTime() > 300000) {
+          this.recentDetections.delete(key);
+        }
+      }
+
       // Convert timestamp to Bucharest timezone
       const detectionTime = new Date(timestamp);
       const bucharestTime = new Date(
         detectionTime.toLocaleString('en-US', { timeZone: 'Europe/Bucharest' }),
       );
 
-      // Format current time as HH:MM
-      const currentTimeString = bucharestTime.toTimeString().slice(0, 5); // Gets HH:MM format
-
       this.logger.log(
-        `Cat ${catId} detected at device ${deviceId} at ${currentTimeString}`,
+        `Cat ${catId} detected at device ${deviceId} at ${bucharestTime.toISOString()}`,
       );
 
-      // Check if cat has ANY active schedule for this device
+      // Check if cat has ANY active schedule (regardless of device)
       const activeSchedules = await this.prisma.feedingSchedule.findMany({
         where: {
           catId: parseInt(catId),
-          deviceId,
           isActive: true,
         },
       });
 
       if (activeSchedules.length > 0) {
-        // Cat has active schedules - check if it's specifically scheduled for this time
-        const scheduledNow = activeSchedules.some(
-          (schedule) => schedule.time === currentTimeString,
+        // Check if there's an active schedule for THIS device
+        const deviceSpecificSchedule = activeSchedules.find(
+          (s) => s.deviceId === deviceId,
         );
 
-        if (scheduledNow) {
+        if (deviceSpecificSchedule) {
           this.logger.log(
-            `Cat ${catId} is on schedule at ${currentTimeString} - no action needed`,
+            `Cat ${catId} has active schedule(s) for this device - NOT dispensing food automatically`,
           );
-        } else {
-          this.logger.log(
-            `Cat ${catId} has active schedules but not for ${currentTimeString} - no action needed`,
-          );
+          return;
         }
-        return; // Don't dispense if cat has any active schedule
+
+        // Cat has schedules but not for this device - still don't dispense
+        this.logger.log(
+          `Cat ${catId} has active schedules for other devices - NOT dispensing food automatically`,
+        );
+        return;
       }
 
-      // Cat has no active schedules at all - dispense food
-      this.logger.log(`Cat ${catId} has no active schedules - dispensing food`);
+      // If we get here, either no schedules exist or none for this device
+      this.logger.log(
+        `Dispensing food for cat ${catId} at device ${deviceId} - no active schedules found`,
+      );
 
-      const success = await this.dispenseFeed(deviceId, catId, 100);
+      const success = await this.dispenseFeed(deviceId, catId, 20);
 
       if (success) {
-        // Record the feeding in history
         await this.prisma.feedingHistory.create({
           data: {
             catId: parseInt(catId),
             deviceId,
-            amount: 100,
+            amount: 20,
             timestamp: new Date(),
           },
         });
-
-        this.logger.log(
-          `Successfully dispensed food for cat ${catId} at device ${deviceId}`,
-        );
-      } else {
-        this.logger.error(
-          `Failed to dispense food for cat ${catId} at device ${deviceId}`,
-        );
       }
     } catch (error) {
       this.logger.error(
@@ -521,9 +536,13 @@ export class MqttService implements OnModuleInit, OnModuleDestroy {
     try {
       const payload = JSON.parse(message);
       const deviceId = topic.split('/')[1];
+
+      if (!topic.endsWith('/info') && !topic.endsWith('/commands/info')) {
+        return;
+      }
+
       this.logger.log(`Info message from device ${deviceId}:`, payload);
 
-      // Handle weight updates
       if (payload.action === 'sendWeight' && payload.weight) {
         const weight = parseFloat(payload.weight);
         this.deviceWeights.set(deviceId, {
