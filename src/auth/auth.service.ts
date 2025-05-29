@@ -39,6 +39,10 @@ export class AuthService {
 
     const payload = { sub: user.id, email: user.email };
 
+    this.emailService
+      .sendWelcomeEmail(user.email)
+      .catch((error) => console.error('Welcome email failed:', error));
+
     return {
       access_token: this.jwtService.sign(payload),
       user,
